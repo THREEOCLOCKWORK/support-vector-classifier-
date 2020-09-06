@@ -1,0 +1,83 @@
+Project claasification of temperature data
+
+
+import pandas as pd
+import numpy as np
+import seaborn; seaborn.set()
+import matplotlib.pyplot as plt 
+from datetime import datetime,date,time
+
+#from datetime import calendar
+input_df=pd.read_csv("D:\DATA\COMPETE FOR PHD\DATA\clean_data_2017.csv") 
+# changing the column name and all in lowercase
+input_df = input_df.rename(columns = {"Time":"time","Var1": "co2", "Var2": "rh","Var3": "temp"})
+input_df.set_index('time',inplace=False)
+
+#New data for 8minutes,8m frame,tangent =slope=concetration differnce of co2-time chnage
+input_df['co2_8m']=input_df['co2'].rolling(8).mean()
+##Creating the data frame 
+input_df_8min0=input_df[0:1]
+input_df_8min1=input_df[1::8]
+input_df_8m= pd.concat([input_df_8min0,input_df_8min1], axis=0)
+del input_df_8m['rh']
+del input_df_8m['temp']
+#
+##Numerator carbondioxide for 8m
+input_df_8m['co2_8m']=input_df_8m['co2']
+input_df_8m['co2_8m_diff']=(input_df_8m['co2_8m'] - input_df_8m['co2_8m'].shift(1))
+input_df_8m['co2_8m_diff'].fillna(0, inplace=True)
+#
+## creating the denomenator, index difference
+input_df_8m['index_col_8m'] = input_df_8m.index
+input_df_8m['Delta_8m']=(input_df_8m['index_col_8m'] - input_df_8m['index_col_8m'].shift(1))
+input_df_8m['Delta_8m'].fillna(0, inplace=True)
+#
+##finding the slope and then the angle
+#
+input_df_8m['tan_theta_8m']= (input_df_8m['co2_8m_diff'])/(input_df_8m['Delta_8m'])
+input_df_8m['tan_theta_8m'].fillna(0, inplace=True)
+input_df_8m['theta_8m']= np.arctan(input_df_8m['tan_theta_8m'])
+input_df_8m['theta_8m'].fillna(0, inplace=True)
+input_df_8m['theta_8m']= np.degrees(input_df_8m['theta_8m'])
+
+input_df_8m['theta_8m_difference']=(input_df_8m['theta_8m'] - input_df_8m['theta_8m'].shift(1))
+input_df_8m['theta_8m_difference'].fillna(0, inplace=True)
+
+conditions = [
+    (input_df_8m['co2'] > 500) & (input_df_8m['theta_8m_difference'].between(0,30)),
+    (input_df_8m['co2'] > 500) & (input_df_8m['theta_8m_difference'].between(30,80)),
+    (input_df_8m['co2'] > 500) & (input_df_8m['theta_8m_difference'].between(80,180)),
+    (input_df_8m['co2'] > 500) & (input_df_8m['theta_8m_difference'].between(-30,0)),
+    (input_df_8m['co2'] > 500) & (input_df_8m['theta_8m_difference'].between(-80,-30)),
+    (input_df_8m['co2'] > 500) & (input_df_8m['theta_8m_difference'].between(-180,-80)),
+    ]
+         
+values=[1,2,3,1,2,3]
+
+input_df_8m['categrized angle']=np.select(conditions,values,0)
+
+# seperating the data as test and train 
+input_df_x=input_df_8m.drop(['time','co2_8m','co2_8m_diff','Delta_8m','index_col_8m','tan_theta_8m','theta_8m','categrized angle'],axis=1)
+input_df_y=input_df_8m.drop(['time','co2','co2_8m','co2_8m_diff','Delta_8m','index_col_8m','tan_theta_8m','theta_8m','theta_8m_difference'],axis=1)
+
+
+# seperating the data as test and train 
+from sklearn.model_selection import train_test_split
+x_train, x_test, y_train,y_test = train_test_split(input_df_x,input_df_y,test_size = 0.2,random_state=0)
+
+from sklearn.svm import SVC
+
+
+classifier = SVC(kernel = 'poly', degree=8)
+classifier.fit(x_train, y_train)
+
+#The model is already created and testing using tetsing data
+y_pred = classifier.predict(x_test)
+
+#understanading the accuracy of model using residual value Rsquare
+from sklearn.metrics import r2_score
+score=r2_score(y_test,y_pred)
+
+from sklearn.metrics import accuracy_score
+#Making of confusion matrix 
+accuracy  =accuracy_score(y_test,y_pred)
